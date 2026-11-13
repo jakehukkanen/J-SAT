@@ -105,7 +105,7 @@ impl Default for JSatPluginParams {
 }
 
 impl Plugin for JSatPlugin {
-    const NAME: &'static str = "J-SAT";
+    const NAME: &'static str = "J-SAT AutoGain";
     const VENDOR: &'static str = "Jake Hukkanen";
     const URL: &'static str = "";
     const EMAIL: &'static str = "";
@@ -194,7 +194,7 @@ impl Plugin for JSatPlugin {
 }
 
 impl ClapPlugin for JSatPlugin {
-    const CLAP_ID: &'static str = "com.jakehukkanen.j-sat";
+    const CLAP_ID: &'static str = "com.jakehukkanen.j-sat-autogain";
     const CLAP_DESCRIPTION: Option<&'static str> =
         Some("Multi-stage Phat Rack saturation, OTT, EQ, and clipper");
     const CLAP_MANUAL_URL: Option<&'static str> = None;
@@ -207,7 +207,7 @@ impl ClapPlugin for JSatPlugin {
 }
 
 impl Vst3Plugin for JSatPlugin {
-    const VST3_CLASS_ID: [u8; 16] = *b"JH_JSatPhatRack1";
+    const VST3_CLASS_ID: [u8; 16] = *b"JH_JSatAutoGain1";
     const VST3_SUBCATEGORIES: &'static [Vst3SubCategory] = &[
         Vst3SubCategory::Fx,
         Vst3SubCategory::Distortion,

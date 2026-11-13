@@ -646,7 +646,7 @@ pub(crate) fn create(
 
                 HStack::new(cx, |cx| {
                     Element::new(cx).class("brand-pill");
-                    Label::new(cx, "J-SAT")
+                    Label::new(cx, "J-SAT AUTOGAIN")
                         .class("header-title")
                         .font_family(vec![FamilyOwned::Name(String::from(assets::NOTO_SANS))])
                         .font_weight(FontWeightKeyword::Bold);

@@ -92,19 +92,21 @@ impl MechTubeMono {
         self.mech_high_shelf.reset();
     }
 
-    /// Processes one sample at the 4x oversampled rate through post-OTT2 trim -> Mech -> Tube -> makeup.
+    /// Processes one sample at the 4x oversampled rate through:
+    /// convex Drive trim (-36 dB..=-13 dB) -> Mech -> Tube -> auto-gain compensation.
     #[inline]
     pub fn process_oversampled(&mut self, x: f32, drive: f32) -> f32 {
-        let trim_db = -40.0 + drive * 34.0;
-        let trim_lin = 10.0_f32.powf(trim_db / 20.0);
-        let g_total = trim_lin * (1.0 + drive * 29.0) * (1.0 + drive * 19.0);
-        let makeup = 0.5 / (0.5 * g_total).tanh().max(1e-4);
+        let t = drive.clamp(0.0, 1.0);
+        let drive_db = -36.0 + t.powf(0.75) * 23.0;
+        let trim_lin = 10.0_f32.powf(drive_db / 20.0);
+        let comp_db = -0.6 * (drive_db - (-26.0));
+        let comp_lin = 10.0_f32.powf(comp_db / 20.0);
 
         let m = self.mech_low_shelf.process(x * trim_lin);
         let m = self.mech_high_shelf.process(m);
-        let m = mech_clip(m, drive);
-        let t = tube_saturate(m, drive);
-        t * makeup
+        let m = mech_clip(m, t);
+        let s = tube_saturate(m, t);
+        s * comp_lin
     }
 }
 
