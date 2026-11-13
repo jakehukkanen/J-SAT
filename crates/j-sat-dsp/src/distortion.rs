@@ -93,13 +93,13 @@ impl MechTubeMono {
     }
 
     /// Processes one sample at the 4x oversampled rate through:
-    /// convex Drive trim (-36 dB..=-13 dB) -> Mech -> Tube -> auto-gain compensation.
+    /// concave Drive trim (-40 dB..=-14 dB) -> Mech -> Tube -> downward-only compensation.
     #[inline]
     pub fn process_oversampled(&mut self, x: f32, drive: f32) -> f32 {
         let t = drive.clamp(0.0, 1.0);
-        let drive_db = -36.0 + t.powf(0.75) * 23.0;
+        let drive_db = -40.0 + t.powf(1.4) * 26.0;
         let trim_lin = 10.0_f32.powf(drive_db / 20.0);
-        let comp_db = -0.6 * (drive_db - (-26.0));
+        let comp_db = -0.35 * (drive_db - (-40.0));
         let comp_lin = 10.0_f32.powf(comp_db / 20.0);
 
         let m = self.mech_low_shelf.process(x * trim_lin);

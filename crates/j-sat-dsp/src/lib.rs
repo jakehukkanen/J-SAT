@@ -44,7 +44,7 @@ impl Default for JSatParams {
     fn default() -> Self {
         Self {
             pre_gain_db: 0.0,
-            drive: 0.35,
+            drive: 0.40,
             treble_db: 0.0,
             notch_mix: 0.0,
             sub_cut: false,
