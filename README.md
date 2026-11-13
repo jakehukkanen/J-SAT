@@ -85,4 +85,9 @@ Licensed under the **GNU General Public License v3.0 or later (GPL-3.0-or-later)
 - **[`nih-plug`](https://github.com/robbert-vdh/nih-plug)** & **`nih_plug_vizia`** by Robbert van der Helm for the Rust VST3/CLAP plugin framework and Vizia GUI integration.
 - **[`vitOTTx`](https://github.com/RustedYeast/vitOTTx)** (derived from Matt Tytel's Vital synth DSP) for the 3-band Linkwitz-Riley OTT crossover and upward/downward envelope follower math.
 - **[`CrushClone`](https://github.com/doxiedevops/CrushClone)** for the Mech and Tube distortion waveshaping curves.
-- **[`tube-resonator`](https://github.com/jakehukkanen/tube-resonator)** for the workspace layout and warm skeuomorphic Vizia GUI architecture.
+
+---
+
+## Disclaimer
+
+This plugin was developed with heavy use of AI-assisted coding ("vibecoding"). While tested for audio safety and stability, use it at your own risk—always keep a limiter on your master bus when experimenting with extreme settings. Kilohearts, Snap Heap, and CamelCrusher are trademarks of their respective owners; J-SAT is an independent open-source project and is not affiliated with or endorsed by them.
