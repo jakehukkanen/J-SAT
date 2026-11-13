@@ -15,8 +15,8 @@ use nih_plug_vizia::{assets, create_vizia_editor, ViziaState, ViziaTheming};
 
 use crate::JSatPluginParams;
 
-const BASE_WIDTH: u32 = 960;
-const BASE_HEIGHT: u32 = 252;
+const BASE_WIDTH: u32 = 660;
+const BASE_HEIGHT: u32 = 435;
 const DEFAULT_SCALE: f64 = 1.25;
 
 /// Vertical pixels needed to sweep a rotary knob or numeric box from 0% to 100%.
@@ -859,12 +859,12 @@ pub(crate) fn create(
             .col_between(Pixels(12.0));
 
             // =========================================================================
-            // MAIN RACK CHASSIS
+            // MAIN RACK CHASSIS (TWO-ROW STACKED LAYOUT)
             // =========================================================================
             VStack::new(cx, |cx| {
-                HStack::new(cx, |cx| {
+                VStack::new(cx, |cx| {
                     // -----------------------------------------------------------------
-                    // LEFT MODULE: INPUT & SATURATION
+                    // TOP ROW: INPUT & SATURATION + MODE TOGGLES
                     // -----------------------------------------------------------------
                     VStack::new(cx, |cx| {
                         HStack::new(cx, |cx| {
@@ -897,6 +897,37 @@ pub(crate) fn create(
                                 false,
                                 amber,
                             );
+
+                            Element::new(cx).width(Stretch(1.0));
+
+                            VStack::new(cx, |cx| {
+                                LedToggleSwitch::new(
+                                    cx,
+                                    UiData::params,
+                                    |p| &p.sub_cut,
+                                    "SUB CUT",
+                                    "SUB CUT",
+                                    amber,
+                                )
+                                .width(Pixels(128.0))
+                                .height(Pixels(32.0));
+
+                                LedToggleSwitch::new(
+                                    cx,
+                                    UiData::params,
+                                    |p| &p.soft_clip,
+                                    "SOFT CLIP",
+                                    "SOFT CLIP",
+                                    amber,
+                                )
+                                .width(Pixels(128.0))
+                                .height(Pixels(32.0));
+                            })
+                            .width(Auto)
+                            .height(Auto)
+                            .top(Stretch(1.0))
+                            .bottom(Stretch(1.0))
+                            .row_between(Pixels(12.0));
                         })
                         .class("knob-row")
                         .width(Stretch(1.0))
@@ -907,7 +938,7 @@ pub(crate) fn create(
                     .height(Stretch(1.0));
 
                     // -----------------------------------------------------------------
-                    // RIGHT MODULE: TONE & OUTPUT
+                    // BOTTOM ROW: TONE & OUTPUT + CLIPPER SCOPE
                     // -----------------------------------------------------------------
                     VStack::new(cx, |cx| {
                         HStack::new(cx, |cx| {
@@ -950,38 +981,9 @@ pub(crate) fn create(
                                 amber,
                             );
 
-                            VStack::new(cx, |cx| {
-                                LedToggleSwitch::new(
-                                    cx,
-                                    UiData::params,
-                                    |p| &p.sub_cut,
-                                    "SUB CUT",
-                                    "SUB CUT",
-                                    amber,
-                                )
-                                .width(Pixels(114.0))
-                                .height(Pixels(30.0));
-
-                                LedToggleSwitch::new(
-                                    cx,
-                                    UiData::params,
-                                    |p| &p.soft_clip,
-                                    "SOFT CLIP",
-                                    "SOFT CLIP",
-                                    amber,
-                                )
-                                .width(Pixels(114.0))
-                                .height(Pixels(30.0));
-                            })
-                            .width(Auto)
-                            .height(Auto)
-                            .top(Stretch(1.0))
-                            .bottom(Stretch(1.0))
-                            .row_between(Pixels(12.0));
-
                             ClipperScope::new(cx, scope_for_ui.clone(), params_for_scope.clone())
                                 .width(Stretch(1.0))
-                                .min_width(Pixels(165.0))
+                                .min_width(Pixels(200.0))
                                 .height(Pixels(114.0))
                                 .top(Stretch(1.0))
                                 .bottom(Stretch(1.0));
@@ -991,11 +993,11 @@ pub(crate) fn create(
                         .height(Stretch(1.0));
                     })
                     .class("hardware-module")
-                    .width(Stretch(2.4))
+                    .width(Stretch(1.0))
                     .height(Stretch(1.0));
                 })
                 .class("section-panel")
-                .col_between(Pixels(10.0))
+                .row_between(Pixels(10.0))
                 .width(Stretch(1.0))
                 .height(Stretch(1.0));
             })
