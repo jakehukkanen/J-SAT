@@ -15,8 +15,8 @@ use nih_plug_vizia::{assets, create_vizia_editor, ViziaState, ViziaTheming};
 
 use crate::JSatPluginParams;
 
-const BASE_WIDTH: u32 = 660;
-const BASE_HEIGHT: u32 = 435;
+const BASE_WIDTH: u32 = 676;
+const BASE_HEIGHT: u32 = 440;
 const DEFAULT_SCALE: f64 = 1.25;
 
 /// Vertical pixels needed to sweep a rotary knob or numeric box from 0% to 100%.
@@ -750,7 +750,7 @@ fn build_knob_cell<L, Params, P, FMap>(
     P: Param + 'static,
     FMap: Fn(&Params) -> &P + Copy + 'static,
 {
-    let cell_w = 96.0;
+    let cell_w = 90.0;
     let knob_sz = 68.0;
 
     VStack::new(cx, move |cx| {
@@ -859,48 +859,91 @@ pub(crate) fn create(
             .col_between(Pixels(12.0));
 
             // =========================================================================
-            // MAIN RACK CHASSIS (TWO-ROW STACKED LAYOUT)
+            // MAIN RACK CHASSIS (COMPACT 2x2 GRID LAYOUT)
             // =========================================================================
             VStack::new(cx, |cx| {
                 VStack::new(cx, |cx| {
                     // -----------------------------------------------------------------
-                    // TOP ROW: INPUT & SATURATION + MODE TOGGLES
+                    // TOP ROW: INPUT & SATURATION | TONE & TAME
                     // -----------------------------------------------------------------
-                    VStack::new(cx, |cx| {
-                        HStack::new(cx, |cx| {
-                            Label::new(cx, "INPUT & SATURATION")
-                                .class("module-title")
-                                .font_family(vec![FamilyOwned::Name(String::from(
-                                    assets::NOTO_SANS,
-                                ))])
-                                .font_weight(FontWeightKeyword::Bold);
+                    HStack::new(cx, |cx| {
+                        // Top-Left: INPUT & SATURATION
+                        VStack::new(cx, |cx| {
+                            HStack::new(cx, |cx| {
+                                Label::new(cx, "INPUT & SATURATION")
+                                    .class("module-title")
+                                    .font_family(vec![FamilyOwned::Name(String::from(
+                                        assets::NOTO_SANS,
+                                    ))])
+                                    .font_weight(FontWeightKeyword::Bold);
+                            })
+                            .class("module-header")
+                            .height(Pixels(26.0))
+                            .width(Stretch(1.0));
+
+                            HStack::new(cx, |cx| {
+                                build_knob_cell(
+                                    cx,
+                                    UiData::params,
+                                    |p| &p.pre_gain_db,
+                                    "PRE-GAIN",
+                                    false,
+                                    amber,
+                                );
+
+                                build_knob_cell(
+                                    cx,
+                                    UiData::params,
+                                    |p| &p.drive,
+                                    "DRIVE",
+                                    false,
+                                    amber,
+                                );
+                            })
+                            .class("knob-row")
+                            .col_between(Pixels(16.0))
+                            .width(Stretch(1.0))
+                            .height(Stretch(1.0));
                         })
-                        .class("module-header")
-                        .height(Pixels(26.0))
-                        .width(Stretch(1.0));
+                        .class("hardware-module")
+                        .width(Stretch(1.0))
+                        .height(Stretch(1.0));
 
-                        HStack::new(cx, |cx| {
-                            build_knob_cell(
-                                cx,
-                                UiData::params,
-                                |p| &p.pre_gain_db,
-                                "PRE-GAIN",
-                                false,
-                                amber,
-                            );
+                        // Top-Right: TONE & TAME
+                        VStack::new(cx, |cx| {
+                            HStack::new(cx, |cx| {
+                                Label::new(cx, "TONE & TAME")
+                                    .class("module-title")
+                                    .font_family(vec![FamilyOwned::Name(String::from(
+                                        assets::NOTO_SANS,
+                                    ))])
+                                    .font_weight(FontWeightKeyword::Bold);
+                            })
+                            .class("module-header")
+                            .height(Pixels(26.0))
+                            .width(Stretch(1.0));
 
-                            build_knob_cell(
-                                cx,
-                                UiData::params,
-                                |p| &p.drive,
-                                "DRIVE",
-                                false,
-                                amber,
-                            );
+                            HStack::new(cx, |cx| {
+                                build_knob_cell(
+                                    cx,
+                                    UiData::params,
+                                    |p| &p.treble_db,
+                                    "TREBLE",
+                                    true,
+                                    gold,
+                                );
 
-                            Element::new(cx).width(Stretch(1.0));
+                                build_knob_cell(
+                                    cx,
+                                    UiData::params,
+                                    |p| &p.notch_mix,
+                                    "TAME",
+                                    false,
+                                    coral,
+                                );
 
-                            VStack::new(cx, |cx| {
+                                Element::new(cx).width(Stretch(1.0));
+
                                 LedToggleSwitch::new(
                                     cx,
                                     UiData::params,
@@ -909,8 +952,51 @@ pub(crate) fn create(
                                     "SUB CUT",
                                     amber,
                                 )
-                                .width(Pixels(128.0))
-                                .height(Pixels(32.0));
+                                .width(Pixels(96.0))
+                                .height(Pixels(32.0))
+                                .top(Stretch(1.0))
+                                .bottom(Stretch(1.0));
+                            })
+                            .class("knob-row")
+                            .col_between(Pixels(6.0))
+                            .width(Stretch(1.0))
+                            .height(Stretch(1.0));
+                        })
+                        .class("hardware-module")
+                        .width(Stretch(1.0))
+                        .height(Stretch(1.0));
+                    })
+                    .col_between(Pixels(10.0))
+                    .width(Stretch(1.0))
+                    .height(Stretch(1.0));
+
+                    // -----------------------------------------------------------------
+                    // BOTTOM ROW: CLIPPER | OUTPUT SCOPE
+                    // -----------------------------------------------------------------
+                    HStack::new(cx, |cx| {
+                        // Bottom-Left: CLIPPER
+                        VStack::new(cx, |cx| {
+                            HStack::new(cx, |cx| {
+                                Label::new(cx, "CLIPPER")
+                                    .class("module-title")
+                                    .font_family(vec![FamilyOwned::Name(String::from(
+                                        assets::NOTO_SANS,
+                                    ))])
+                                    .font_weight(FontWeightKeyword::Bold);
+                            })
+                            .class("module-header")
+                            .height(Pixels(26.0))
+                            .width(Stretch(1.0));
+
+                            HStack::new(cx, |cx| {
+                                build_knob_cell(
+                                    cx,
+                                    UiData::params,
+                                    |p| &p.clip_gain_db,
+                                    "CLIP GAIN",
+                                    true,
+                                    amber,
+                                );
 
                                 LedToggleSwitch::new(
                                     cx,
@@ -920,79 +1006,43 @@ pub(crate) fn create(
                                     "SOFT CLIP",
                                     amber,
                                 )
-                                .width(Pixels(128.0))
-                                .height(Pixels(32.0));
+                                .width(Pixels(116.0))
+                                .height(Pixels(32.0))
+                                .top(Stretch(1.0))
+                                .bottom(Stretch(1.0));
                             })
-                            .width(Auto)
-                            .height(Auto)
-                            .top(Stretch(1.0))
-                            .bottom(Stretch(1.0))
-                            .row_between(Pixels(12.0));
+                            .class("knob-row")
+                            .col_between(Pixels(24.0))
+                            .width(Stretch(1.0))
+                            .height(Stretch(1.0));
                         })
-                        .class("knob-row")
+                        .class("hardware-module")
                         .width(Stretch(1.0))
                         .height(Stretch(1.0));
-                    })
-                    .class("hardware-module")
-                    .width(Stretch(1.0))
-                    .height(Stretch(1.0));
 
-                    // -----------------------------------------------------------------
-                    // BOTTOM ROW: TONE & OUTPUT + CLIPPER SCOPE
-                    // -----------------------------------------------------------------
-                    VStack::new(cx, |cx| {
-                        HStack::new(cx, |cx| {
-                            Label::new(cx, "TONE & OUTPUT")
-                                .class("module-title")
-                                .font_family(vec![FamilyOwned::Name(String::from(
-                                    assets::NOTO_SANS,
-                                ))])
-                                .font_weight(FontWeightKeyword::Bold);
-                        })
-                        .class("module-header")
-                        .height(Pixels(26.0))
-                        .width(Stretch(1.0));
-
-                        HStack::new(cx, |cx| {
-                            build_knob_cell(
-                                cx,
-                                UiData::params,
-                                |p| &p.treble_db,
-                                "TREBLE",
-                                true,
-                                gold,
-                            );
-
-                            build_knob_cell(
-                                cx,
-                                UiData::params,
-                                |p| &p.notch_mix,
-                                "TAME",
-                                false,
-                                coral,
-                            );
-
-                            build_knob_cell(
-                                cx,
-                                UiData::params,
-                                |p| &p.clip_gain_db,
-                                "CLIP GAIN",
-                                true,
-                                amber,
-                            );
+                        // Bottom-Right: OUTPUT SCOPE
+                        VStack::new(cx, |cx| {
+                            HStack::new(cx, |cx| {
+                                Label::new(cx, "OUTPUT SCOPE")
+                                    .class("module-title")
+                                    .font_family(vec![FamilyOwned::Name(String::from(
+                                        assets::NOTO_SANS,
+                                    ))])
+                                    .font_weight(FontWeightKeyword::Bold);
+                            })
+                            .class("module-header")
+                            .height(Pixels(26.0))
+                            .width(Stretch(1.0));
 
                             ClipperScope::new(cx, scope_for_ui.clone(), params_for_scope.clone())
                                 .width(Stretch(1.0))
-                                .min_width(Pixels(200.0))
-                                .height(Pixels(114.0))
-                                .top(Stretch(1.0))
-                                .bottom(Stretch(1.0));
+                                .height(Stretch(1.0));
                         })
-                        .class("knob-row")
+                        .class("hardware-module")
                         .width(Stretch(1.0))
                         .height(Stretch(1.0));
                     })
-                    .class("hardware-module")
+                    .col_between(Pixels(10.0))
                     .width(Stretch(1.0))
                     .height(Stretch(1.0));
                 })
