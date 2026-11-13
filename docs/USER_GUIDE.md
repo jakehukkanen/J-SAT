@@ -1,6 +1,6 @@
 # J-SAT — User Guide
 
-**J-SAT** is a zero-allocation multi-stage "Phat Rack" saturation, multiband dynamics, tone-shaping, and clipping plugin (VST3 & CLAP). It packs an entire aggressive bass/synth processing chain—glue OTT, hot saturation, full OTT, high-shelf air, cascaded Mech → Tube distortion, harshness notches, sub cut, and output clipping—into six focused controls.
+**J-SAT** is a zero-allocation multi-stage "Phat Rack" saturation, multiband dynamics, tone-shaping, and clipping plugin (VST3 & CLAP). It packs an entire aggressive bass/synth processing chain—glue OTT, hot saturation, full OTT, high-shelf air, cascaded Mech → Tube distortion, harshness notches, sub cut, clip gain, and output clipping with a real-time scrolling scope—into seven focused controls.
 
 ---
 
@@ -40,12 +40,22 @@ Parallel wet/dry blend for two cascaded harshness-taming peaking notches (`2000 
 - At `0.0%`, the notches are bypassed for raw, forward midrange bite.
 - Turning `TAME` up toward `50%–100%` carves out fatiguing 2–3.2 kHz ear-piercing resonances—especially useful at high `DRIVE` or `TREBLE` settings.
 
-### 5. `SUB CUT` (LED Toggle, default `OFF`)
+### 5. `CLIP GAIN` (`-12.0 dB` to `+12.0 dB`, default `0.0 dB`)
+Bipolar rotary knob applied immediately **after** `SUB CUT` and **before** the output clipper.
+- Lets you push any signal smoothly into the `3 dB` soft knee or `0 dBFS` hard ceiling—or pull back hot peaks for extra headroom—independently of `DRIVE`.
+
+### 6. `SUB CUT` (LED Toggle, default `OFF`)
 Engages an 8th-order (`48 dB/oct`) Butterworth high-pass filter at `135 Hz`.
 - Toggle **ON** when processing mid-bass layers, growls, or guitars/leads that need to stay completely clear of a separate sub-bass channel.
 - Leave **OFF** for full-range basses, kicks, or drum busses.
 
-### 6. `SOFT CLIP` (LED Toggle, default `ON`)
+### 7. `SOFT CLIP` (LED Toggle, default `ON`)
 Selects the final `1x` native-rate output clipper at `0.0 dBFS`:
 - **ON (Default):** `-3.0 dBFS` quadratic soft-knee clipper that smoothly rounds transient peaks into `0.0 dBFS` for loud, punchy analog-style limiting.
 - **OFF:** Strict `0.0 dBFS` digital hard clipper (`[-1.0, 1.0]`) for maximum aggressive transient crunch.
+
+### 8. Real-Time Clipper Scope
+Located on the right side of the **Tone & Output** module, the 60 fps scrolling scope displays:
+- **Gold Silhouette:** Post-clip output peak envelope (`-24 dBFS` to `+6 dBFS` scale).
+- **Amber/Orange Excess:** Pre-clip peak energy exceeding the clipped silhouette—showing exactly how much transient energy is being shaved off.
+- **`0 dBFS` Line & `-3 dBFS` Knee Zone:** Crisp ceiling line at `0.0 dBFS`, plus a shaded `3 dB` soft-knee compression band and dashed `-3.0 dBFS` threshold line when `SOFT CLIP` is enabled.

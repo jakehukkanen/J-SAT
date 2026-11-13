@@ -4,6 +4,7 @@ pub mod biquad;
 pub mod distortion;
 pub mod ott;
 pub mod oversample;
+pub mod scope;
 
 use biquad::{Biquad, BiquadCoeffs, DcBlocker};
 use distortion::{MechTubeMono, khs_saturate, output_clip};
@@ -11,6 +12,7 @@ use ott::OttMono;
 use oversample::Oversampler4x;
 
 pub use distortion::ClipMode;
+pub use scope::{SCOPE_LEN, ScopeRing};
 
 /// 8th-order Butterworth high-pass Q values (4 cascaded 2nd-order sections = 48 dB/oct).
 const SUB_CUT_QS: [f64; 4] = [0.5098, 0.6013, 0.8999, 2.5629];
@@ -37,6 +39,7 @@ pub struct JSatParams {
     pub treble_db: f32,
     pub notch_mix: f32,
     pub sub_cut: bool,
+    pub clip_gain_db: f32,
     pub clip_mode: ClipMode,
 }
 
@@ -48,6 +51,7 @@ impl Default for JSatParams {
             treble_db: 0.0,
             notch_mix: 0.0,
             sub_cut: false,
+            clip_gain_db: 0.0,
             clip_mode: ClipMode::Soft,
         }
     }
@@ -146,8 +150,9 @@ impl JSatChannel {
         drive: f32,
         notch_mix: f32,
         sub_cut: bool,
+        clip_gain_lin: f32,
         clip_mode: ClipMode,
-    ) -> f32 {
+    ) -> (f32, f32) {
         // 1. Pre-Gain
         let mut x = input * pre_gain_lin;
 
@@ -183,8 +188,10 @@ impl JSatChannel {
             }
         }
 
-        // 9. Output Clipper (1x native sample rate, NO oversampling)
-        output_clip(x, clip_mode)
+        // 9. Clip Gain + Output Clipper (1x native sample rate, NO oversampling)
+        let pre_clip = x * clip_gain_lin;
+        let out = output_clip(pre_clip, clip_mode);
+        (pre_clip, out)
     }
 }
 
@@ -193,6 +200,10 @@ pub struct JSatProcessor {
     sample_rate: f64,
     last_treble_db: f32,
     channels: [JSatChannel; 2],
+    scope_accum_samples: usize,
+    scope_samples_per_col: usize,
+    scope_pre_max: f32,
+    scope_post_max: f32,
 }
 
 impl JSatProcessor {
@@ -202,11 +213,16 @@ impl JSatProcessor {
             sample_rate: sr,
             last_treble_db: 0.0,
             channels: [JSatChannel::new(sr), JSatChannel::new(sr)],
+            scope_accum_samples: 0,
+            scope_samples_per_col: (sr / 150.0).round().max(1.0) as usize,
+            scope_pre_max: 0.0,
+            scope_post_max: 0.0,
         }
     }
 
     pub fn set_sample_rate(&mut self, sample_rate: f64) {
         self.sample_rate = sample_rate.max(8000.0);
+        self.scope_samples_per_col = (self.sample_rate / 150.0).round().max(1.0) as usize;
         let treble_db = self.last_treble_db as f64;
         for ch in &mut self.channels {
             ch.set_sample_rate(self.sample_rate, treble_db);
@@ -214,6 +230,9 @@ impl JSatProcessor {
     }
 
     pub fn reset(&mut self) {
+        self.scope_accum_samples = 0;
+        self.scope_pre_max = 0.0;
+        self.scope_post_max = 0.0;
         for ch in &mut self.channels {
             ch.reset();
         }
@@ -221,6 +240,17 @@ impl JSatProcessor {
 
     /// Processes a stereo block in-place with zero heap allocations.
     pub fn process_block(&mut self, left: &mut [f32], right: &mut [f32], params: &JSatParams) {
+        self.process_block_with_scope(left, right, params, None);
+    }
+
+    /// Processes a stereo block in-place and optionally pushes peak telemetry to `scope`.
+    pub fn process_block_with_scope(
+        &mut self,
+        left: &mut [f32],
+        right: &mut [f32],
+        params: &JSatParams,
+        scope: Option<&ScopeRing>,
+    ) {
         if (params.treble_db - self.last_treble_db).abs() > 1e-4 {
             self.last_treble_db = params.treble_db;
             let treble_db = params.treble_db as f64;
@@ -230,27 +260,44 @@ impl JSatProcessor {
         }
 
         let pre_gain_lin = 10.0_f32.powf(params.pre_gain_db / 20.0);
+        let clip_gain_lin = 10.0_f32.powf(params.clip_gain_db / 20.0);
         let drive = params.drive.clamp(0.0, 1.0);
         let notch_mix = params.notch_mix.clamp(0.0, 1.0);
 
         let len = left.len().min(right.len());
         for i in 0..len {
-            left[i] = self.channels[0].process_sample(
+            let (pre_l, out_l) = self.channels[0].process_sample(
                 left[i],
                 pre_gain_lin,
                 drive,
                 notch_mix,
                 params.sub_cut,
+                clip_gain_lin,
                 params.clip_mode,
             );
-            right[i] = self.channels[1].process_sample(
+            let (pre_r, out_r) = self.channels[1].process_sample(
                 right[i],
                 pre_gain_lin,
                 drive,
                 notch_mix,
                 params.sub_cut,
+                clip_gain_lin,
                 params.clip_mode,
             );
+            left[i] = out_l;
+            right[i] = out_r;
+
+            if let Some(ring) = scope {
+                self.scope_pre_max = self.scope_pre_max.max(pre_l.abs().max(pre_r.abs()));
+                self.scope_post_max = self.scope_post_max.max(out_l.abs().max(out_r.abs()));
+                self.scope_accum_samples += 1;
+                if self.scope_accum_samples >= self.scope_samples_per_col {
+                    ring.push(self.scope_pre_max, self.scope_post_max);
+                    self.scope_accum_samples = 0;
+                    self.scope_pre_max = 0.0;
+                    self.scope_post_max = 0.0;
+                }
+            }
         }
     }
 }
@@ -289,6 +336,7 @@ mod tests {
                 treble_db: 6.0,
                 notch_mix: 1.0,
                 sub_cut: true,
+                clip_gain_db: 12.0,
                 clip_mode: mode,
             };
             proc.process_block(&mut l, &mut r, &params);
@@ -337,5 +385,19 @@ mod tests {
         // Below -3 dBFS (~0.7079), soft clipper is linear
         assert!((output_clip(0.5, ClipMode::Soft) - 0.5).abs() < 1e-6);
         assert!((output_clip(-0.5, ClipMode::Soft) - (-0.5)).abs() < 1e-6);
+    }
+
+    #[test]
+    fn scope_ring_records_peaks_chronologically() {
+        let ring = ScopeRing::new();
+        ring.push(0.5, 0.4);
+        ring.push(1.2, 0.9);
+        let mut pre = [0.0f32; SCOPE_LEN];
+        let mut post = [0.0f32; SCOPE_LEN];
+        ring.snapshot(&mut pre, &mut post);
+        assert!((pre[SCOPE_LEN - 2] - 0.5).abs() < 1e-6);
+        assert!((post[SCOPE_LEN - 2] - 0.4).abs() < 1e-6);
+        assert!((pre[SCOPE_LEN - 1] - 1.2).abs() < 1e-6);
+        assert!((post[SCOPE_LEN - 1] - 0.9).abs() < 1e-6);
     }
 }

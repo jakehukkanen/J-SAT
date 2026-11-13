@@ -3,7 +3,7 @@
 use std::num::NonZeroU32;
 use std::sync::Arc;
 
-use j_sat_dsp::{ClipMode, JSatParams, JSatProcessor};
+use j_sat_dsp::{ClipMode, JSatParams, JSatProcessor, ScopeRing};
 use nih_plug::prelude::*;
 use nih_plug_vizia::ViziaState;
 
@@ -12,6 +12,7 @@ mod editor;
 pub struct JSatPlugin {
     params: Arc<JSatPluginParams>,
     dsp: JSatProcessor,
+    scope: Arc<ScopeRing>,
 }
 
 #[derive(Params)]
@@ -34,6 +35,9 @@ pub struct JSatPluginParams {
     #[id = "sub_cut"]
     pub sub_cut: BoolParam,
 
+    #[id = "clip_gain"]
+    pub clip_gain_db: FloatParam,
+
     #[id = "soft_clip"]
     pub soft_clip: BoolParam,
 }
@@ -43,6 +47,7 @@ impl Default for JSatPlugin {
         Self {
             params: Arc::new(JSatPluginParams::default()),
             dsp: JSatProcessor::new(44100.0),
+            scope: Arc::new(ScopeRing::new()),
         }
     }
 }
@@ -99,6 +104,18 @@ impl Default for JSatPluginParams {
 
             sub_cut: BoolParam::new("Sub Cut", def.sub_cut),
 
+            clip_gain_db: FloatParam::new(
+                "Clip Gain",
+                def.clip_gain_db,
+                FloatRange::Linear {
+                    min: -12.0,
+                    max: 12.0,
+                },
+            )
+            .with_smoother(SmoothingStyle::Linear(10.0))
+            .with_unit(" dB")
+            .with_value_to_string(formatters::v2s_f32_rounded(1)),
+
             soft_clip: BoolParam::new("Soft Clip", true),
         }
     }
@@ -128,7 +145,11 @@ impl Plugin for JSatPlugin {
     }
 
     fn editor(&mut self, _async_executor: AsyncExecutor<Self>) -> Option<Box<dyn Editor>> {
-        editor::create(self.params.clone(), self.params.editor_state.clone())
+        editor::create(
+            self.params.clone(),
+            self.params.editor_state.clone(),
+            self.scope.clone(),
+        )
     }
 
     fn initialize(
@@ -174,6 +195,7 @@ impl Plugin for JSatPlugin {
                 treble_db: self.params.treble_db.smoothed.next_step(step),
                 notch_mix: self.params.notch_mix.smoothed.next_step(step),
                 sub_cut: self.params.sub_cut.value(),
+                clip_gain_db: self.params.clip_gain_db.smoothed.next_step(step),
                 clip_mode: if self.params.soft_clip.value() {
                     ClipMode::Soft
                 } else {
@@ -181,10 +203,11 @@ impl Plugin for JSatPlugin {
                 },
             };
 
-            self.dsp.process_block(
+            self.dsp.process_block_with_scope(
                 &mut left[offset..offset + len],
                 &mut right[offset..offset + len],
                 &dsp_params,
+                Some(&self.scope),
             );
             offset += len;
         }

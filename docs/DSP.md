@@ -11,7 +11,8 @@ Stereo audio is processed in 32-sample sub-blocks (for sample-accurate parameter
 ```text
 Input -> [1. Pre-Gain] -> [2. OTT 33%] -> [3. Saturate +10dB (4x OS) + DC Block]
       -> [4. OTT 100%] -> [5. 6kHz High Shelf] -> [6. Mech->Tube (4x OS) + AutoGain]
-      -> [7. Parallel Harshness Notches] -> [8. 135Hz 48dB/oct Sub Cut] -> [9. 1x Clipper] -> Output
+      -> [7. Parallel Harshness Notches] -> [8. 135Hz 48dB/oct Sub Cut]
+      -> [9. Clip Gain + 1x Clipper] -> Output
 ```
 
 ---
@@ -104,10 +105,15 @@ Cleanly bypassed when disabled.
 
 ---
 
-## 8. 1x Output Clipper
-Runs strictly at the native $1\times$ sample rate (no oversampling) so inter-sample reconstruction never exceeds `0.0 dBFS` (`[-1.0, 1.0]`):
+## 8. Clip Gain, 1x Output Clipper & Lock-Free Scope Telemetry
+Immediately after `SUB CUT`, `clip_gain_db` ($\in [-12.0, +12.0]\text{ dB}$, 10 ms linear smoothing) scales the signal by $g_{\text{clip}} = 10^{\,\text{clip\_gain\_db} / 20}$ right before the clipper.
+
+The clipper runs strictly at the native $1\times$ sample rate (no oversampling) so inter-sample reconstruction never exceeds `0.0 dBFS` (`[-1.0, 1.0]`):
 
 - **Soft Clip (`ON`, default):** Linear below $T = 10^{-3/20} \approx 0.70794578$ (`-3.0 dBFS`), transitioning through a $C^1$-continuous quadratic knee up to $M = 2 - T \approx 1.2920542$:
   $$f(x) = \text{sgn}(x) \cdot \left(T + (|x| - T) - \frac{(|x| - T)^2}{4(1 - T)}\right), \qquad T < |x| < M$$
   and clamped to $\pm 1.0$ for $|x| \ge M$.
 - **Hard Clip (`OFF`):** Strict digital clamp $\text{clamp}(x, -1.0, 1.0)$.
+
+### Lock-Free Scope Ring Buffer (`ScopeRing`)
+To drive the 60 fps Vizia `ClipperScope` without locks or audio-thread allocations, `JSatProcessor` downsamples the stereo max absolute peaks (`pre_clip` and `post_clip`) at a `~150 Hz` column rate (`(sample_rate / 150.0).round()` samples per column) and writes `f32::to_bits()` into a fixed 256-slot `[AtomicU32; 256]` ring buffer (`ScopeRing`) shared via `Arc`.

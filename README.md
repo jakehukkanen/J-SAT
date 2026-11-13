@@ -50,8 +50,8 @@ On **Linux**, copy them to `~/.vst3/` and `~/.clap/`.
 2. **4x Oversampled Nonlinear Stages (`Oversampler4x`):**
    - Fixed `+10 dB` kHs-style `tanh` Saturate stage driving hot into OTT Stage 2, followed by a 1-pole `7.5 Hz` DC blocker.
    - Cascaded CamelCrusher-style **Mech** (200 Hz low-shelf + 4 kHz high-shelf pre-emphasis EQ + cubic-softened hard clipper) $\rightarrow$ **Tube** (asymmetric biased `tanh`) waveshaper with a concave `t^1.4` Drive taper (`-40 dB` to `-14 dB`) and `-0.35 dB/dB` downward auto-gain compensation.
-3. **Tone Shaping, Sub Cut & 1x Output Clipper:**
-   - `6000 Hz` (`Q = 0.707`) Treble high shelf (`-6 dB` to `+6 dB`), parallel harshness-taming notches (`2000 Hz` and `3200 Hz`, `-10 dB`), toggleable `135 Hz` 48 dB/oct 8th-order Butterworth Sub Cut, and a 1x-rate `-3.0 dBFS` quadratic soft-knee / `0.0 dBFS` hard output clipper.
+3. **Tone Shaping, Sub Cut, Clip Gain & Real-Time Scope:**
+   - `6000 Hz` (`Q = 0.707`) Treble high shelf (`-6 dB` to `+6 dB`), parallel harshness-taming notches (`2000 Hz` and `3200 Hz`, `-10 dB`), toggleable `135 Hz` 48 dB/oct 8th-order Butterworth Sub Cut, `Clip Gain` (`-12 dB` to `+12 dB`), a 1x-rate `-3.0 dBFS` quadratic soft-knee / `0.0 dBFS` hard output clipper, and a lock-free 60 fps scrolling peak/clipper scope.
 
 ---
 
@@ -68,7 +68,8 @@ J-SAT/
 │   │       ├── biquad.rs     # 64-bit RBJ biquads & 1-pole DC blocker
 │   │       ├── oversample.rs # 4x polyphase IIR half-band oversampler
 │   │       ├── ott.rs        # 3-band Linkwitz-Riley OTT compressor
-│   │       └── distortion.rs # Saturate, Mech -> Tube cascade, Soft/Hard clipper
+│   │       ├── distortion.rs # Saturate, Mech -> Tube cascade, Soft/Hard clipper
+│   │       └── scope.rs      # Lock-free atomic ring buffer for clipper scope telemetry
 │   └── j-sat/                # "J-SAT" VST3/CLAP plugin & skeuomorphic Vizia GUI
 ├── docs/
 │   ├── USER_GUIDE.md         # Full parameter & usage guide

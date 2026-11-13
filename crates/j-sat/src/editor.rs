@@ -2,7 +2,9 @@
 
 use std::f32::consts::PI;
 use std::sync::Arc;
+use std::time::Duration;
 
+use j_sat_dsp::{SCOPE_LEN, ScopeRing};
 use nih_plug::prelude::{Editor, Param};
 use nih_plug_vizia::vizia::prelude::*;
 use nih_plug_vizia::vizia::vg;
@@ -13,8 +15,8 @@ use nih_plug_vizia::{assets, create_vizia_editor, ViziaState, ViziaTheming};
 
 use crate::JSatPluginParams;
 
-const BASE_WIDTH: u32 = 720;
-const BASE_HEIGHT: u32 = 248;
+const BASE_WIDTH: u32 = 960;
+const BASE_HEIGHT: u32 = 252;
 const DEFAULT_SCALE: f64 = 1.25;
 
 /// Vertical pixels needed to sweep a rotary knob or numeric box from 0% to 100%.
@@ -556,6 +558,185 @@ impl View for LedToggleSwitch {
     }
 }
 
+/// Real-time scrolling peak/clipper scope rendered via `femtovg` at 60 fps.
+pub struct ClipperScope {
+    scope: Arc<ScopeRing>,
+    params: Arc<JSatPluginParams>,
+}
+
+impl ClipperScope {
+    pub fn new(
+        cx: &mut Context,
+        scope: Arc<ScopeRing>,
+        params: Arc<JSatPluginParams>,
+    ) -> Handle<'_, Self> {
+        let timer = cx.add_timer(Duration::from_millis(16), None, |cx, action| {
+            if matches!(action, TimerAction::Tick(_)) {
+                cx.needs_redraw();
+            }
+        });
+        cx.start_timer(timer);
+
+        Self { scope, params }.build(cx, |_| {})
+    }
+}
+
+impl View for ClipperScope {
+    fn element(&self) -> Option<&'static str> {
+        Some("clipper-scope")
+    }
+
+    fn draw(&self, cx: &mut DrawContext, canvas: &mut Canvas) {
+        let bounds = cx.bounds();
+        if bounds.w <= 4.0 || bounds.h <= 4.0 {
+            return;
+        }
+
+        let dpx = cx.scale_factor();
+        let radius = 5.0 * dpx;
+
+        // 1. Dark recessed background (#181512)
+        let mut bg = vg::Path::new();
+        bg.rounded_rect(bounds.x, bounds.y, bounds.w, bounds.h, radius);
+        let bg_paint = vg::Paint::color(vg::Color::rgb(24, 21, 18));
+        canvas.fill_path(&bg, &bg_paint);
+
+        canvas.save();
+        canvas.scissor(bounds.x + dpx, bounds.y + dpx, bounds.w - 2.0 * dpx, bounds.h - 2.0 * dpx);
+
+        let pad_y = 4.0 * dpx;
+        let top = bounds.y + pad_y;
+        let inner_h = (bounds.h - 2.0 * pad_y).max(1.0);
+        let bottom = top + inner_h;
+
+        let db_min = -24.0_f32;
+        let db_max = 6.0_f32;
+        let db_span = db_max - db_min;
+        let db_to_y = |db: f32| -> f32 {
+            let t = ((db - db_min) / db_span).clamp(0.0, 1.0);
+            bottom - t * inner_h
+        };
+
+        let y_zero = db_to_y(0.0);
+        let y_neg3 = db_to_y(-3.0);
+
+        // 2. Soft-knee compression zone (-3 dBFS to 0 dBFS) when SOFT CLIP is active
+        let is_soft = self.params.soft_clip.value();
+        if is_soft {
+            let mut knee_rect = vg::Path::new();
+            knee_rect.rect(bounds.x, y_zero, bounds.w, y_neg3 - y_zero);
+            let knee_paint = vg::Paint::color(vg::Color::rgba(245, 179, 73, 28));
+            canvas.fill_path(&knee_rect, &knee_paint);
+        }
+
+        // 3. Subtle horizontal dB grid lines (-6, -12, -18 dBFS)
+        for db in [-6.0_f32, -12.0, -18.0] {
+            let y = db_to_y(db);
+            let mut grid = vg::Path::new();
+            grid.move_to(bounds.x, y);
+            grid.line_to(bounds.x + bounds.w, y);
+            let mut gpaint = vg::Paint::color(vg::Color::rgba(90, 76, 64, 95));
+            gpaint.set_line_width(1.0 * dpx);
+            canvas.stroke_path(&grid, &gpaint);
+        }
+
+        // 4. Snapshot lock-free audio telemetry
+        let mut pre = [0.0_f32; SCOPE_LEN];
+        let mut post = [0.0_f32; SCOPE_LEN];
+        self.scope.snapshot(&mut pre, &mut post);
+
+        let amp_to_y = |amp: f32| -> f32 {
+            if amp <= 1e-5 {
+                bottom
+            } else {
+                let db = 20.0 * amp.log10();
+                db_to_y(db)
+            }
+        };
+
+        let step_x = bounds.w / (SCOPE_LEN - 1) as f32;
+
+        // 5. Pre-clip envelope (excess energy above post-clip highlighted in bright orange/amber)
+        let mut pre_fill = vg::Path::new();
+        let mut pre_line = vg::Path::new();
+        pre_fill.move_to(bounds.x, bottom);
+        for (i, &p) in pre.iter().enumerate() {
+            let x = bounds.x + i as f32 * step_x;
+            let y = amp_to_y(p);
+            pre_fill.line_to(x, y);
+            if i == 0 {
+                pre_line.move_to(x, y);
+            } else {
+                pre_line.line_to(x, y);
+            }
+        }
+        pre_fill.line_to(bounds.x + bounds.w, bottom);
+        pre_fill.close();
+
+        let pre_fill_paint = vg::Paint::color(vg::Color::rgba(245, 130, 48, 125));
+        canvas.fill_path(&pre_fill, &pre_fill_paint);
+        let mut pre_line_paint = vg::Paint::color(vg::Color::rgba(255, 165, 70, 220));
+        pre_line_paint.set_line_width(1.25 * dpx);
+        canvas.stroke_path(&pre_line, &pre_line_paint);
+
+        // 6. Post-clip envelope silhouette
+        let mut post_fill = vg::Path::new();
+        let mut post_line = vg::Path::new();
+        post_fill.move_to(bounds.x, bottom);
+        for (i, &p) in post.iter().enumerate() {
+            let x = bounds.x + i as f32 * step_x;
+            let y = amp_to_y(p);
+            post_fill.line_to(x, y);
+            if i == 0 {
+                post_line.move_to(x, y);
+            } else {
+                post_line.line_to(x, y);
+            }
+        }
+        post_fill.line_to(bounds.x + bounds.w, bottom);
+        post_fill.close();
+
+        let post_fill_paint = vg::Paint::color(vg::Color::rgba(242, 203, 97, 90));
+        canvas.fill_path(&post_fill, &post_fill_paint);
+        let mut post_line_paint = vg::Paint::color(vg::Color::rgba(255, 224, 140, 240));
+        post_line_paint.set_line_width(1.5 * dpx);
+        canvas.stroke_path(&post_line, &post_line_paint);
+
+        // 7. -3 dBFS dashed soft-knee threshold line
+        if is_soft {
+            let dash = 4.0 * dpx;
+            let gap = 4.0 * dpx;
+            let mut x = bounds.x;
+            let mut knee_line = vg::Path::new();
+            while x < bounds.x + bounds.w {
+                knee_line.move_to(x, y_neg3);
+                knee_line.line_to((x + dash).min(bounds.x + bounds.w), y_neg3);
+                x += dash + gap;
+            }
+            let mut knee_paint = vg::Paint::color(vg::Color::rgba(245, 179, 73, 150));
+            knee_paint.set_line_width(1.1 * dpx);
+            canvas.stroke_path(&knee_line, &knee_paint);
+        }
+
+        // 8. Crisp 0.0 dBFS ceiling line
+        let mut ceil_line = vg::Path::new();
+        ceil_line.move_to(bounds.x, y_zero);
+        ceil_line.line_to(bounds.x + bounds.w, y_zero);
+        let mut ceil_paint = vg::Paint::color(vg::Color::rgba(255, 211, 130, 200));
+        ceil_paint.set_line_width(1.3 * dpx);
+        canvas.stroke_path(&ceil_line, &ceil_paint);
+
+        canvas.restore();
+
+        // Outer recessed border
+        let mut border = vg::Path::new();
+        border.rounded_rect(bounds.x, bounds.y, bounds.w, bounds.h, radius);
+        let mut border_paint = vg::Paint::color(vg::Color::rgb(73, 62, 54));
+        border_paint.set_line_width(1.0 * dpx);
+        canvas.stroke_path(&border, &border_paint);
+    }
+}
+
 fn build_knob_cell<L, Params, P, FMap>(
     cx: &mut Context,
     params: L,
@@ -621,12 +802,16 @@ fn build_rack_screw(cx: &mut Context) {
 pub(crate) fn create(
     params: Arc<JSatPluginParams>,
     editor_state: Arc<ViziaState>,
+    scope: Arc<ScopeRing>,
 ) -> Option<Box<dyn Editor>> {
     create_vizia_editor(editor_state, ViziaTheming::Builtin, move |cx, _| {
         assets::register_noto_sans_bold(cx);
         cx.set_default_font(&[assets::NOTO_SANS]);
 
         let _ = cx.add_stylesheet(include_style!("src/theme.css"));
+
+        let scope_for_ui = scope.clone();
+        let params_for_scope = params.clone();
 
         UiData {
             params: params.clone(),
@@ -756,6 +941,15 @@ pub(crate) fn create(
                                 coral,
                             );
 
+                            build_knob_cell(
+                                cx,
+                                UiData::params,
+                                |p| &p.clip_gain_db,
+                                "CLIP GAIN",
+                                true,
+                                amber,
+                            );
+
                             VStack::new(cx, |cx| {
                                 LedToggleSwitch::new(
                                     cx,
@@ -765,7 +959,7 @@ pub(crate) fn create(
                                     "SUB CUT",
                                     amber,
                                 )
-                                .width(Pixels(126.0))
+                                .width(Pixels(114.0))
                                 .height(Pixels(30.0));
 
                                 LedToggleSwitch::new(
@@ -776,7 +970,7 @@ pub(crate) fn create(
                                     "SOFT CLIP",
                                     amber,
                                 )
-                                .width(Pixels(126.0))
+                                .width(Pixels(114.0))
                                 .height(Pixels(30.0));
                             })
                             .width(Auto)
@@ -784,13 +978,20 @@ pub(crate) fn create(
                             .top(Stretch(1.0))
                             .bottom(Stretch(1.0))
                             .row_between(Pixels(12.0));
+
+                            ClipperScope::new(cx, scope_for_ui.clone(), params_for_scope.clone())
+                                .width(Stretch(1.0))
+                                .min_width(Pixels(165.0))
+                                .height(Pixels(114.0))
+                                .top(Stretch(1.0))
+                                .bottom(Stretch(1.0));
                         })
                         .class("knob-row")
                         .width(Stretch(1.0))
                         .height(Stretch(1.0));
                     })
                     .class("hardware-module")
-                    .width(Stretch(1.5))
+                    .width(Stretch(2.4))
                     .height(Stretch(1.0));
                 })
                 .class("section-panel")
